@@ -1,0 +1,22 @@
+[package]
+name = "CustomToken"
+version = "1.0.0"
+
+[addresses]
+std = "0x1"
+aptos_framework = "0x1"
+custom_token = "06235c6343aa8f948cf3cb9be4233e3cbe0ee908683e1bf681e176ffb184f6de"
+
+# [dependencies]
+# MoveStdlib = { local = "../move-stdlib" }
+# AptosFramework = { local = "../aptos-framework"}
+
+[dependencies.MoveStdlib]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/move-stdlib"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
