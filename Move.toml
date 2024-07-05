@@ -1,22 +1,25 @@
 [package]
-name = "CustomToken"
+name = "custom"
 version = "1.0.0"
+authors = []
 
 [addresses]
 std = "0x1"
+aptos_std = "0x1"
 aptos_framework = "0x1"
-custom_token = "06235c6343aa8f948cf3cb9be4233e3cbe0ee908683e1bf681e176ffb184f6de"
+aptos_token_objects = "0x4"
+custom = "0x0aee4d00ccdb13c357cf9a2b2ede7631b9babd28416186e2c062969425218e04"
 
-# [dependencies]
-# MoveStdlib = { local = "../move-stdlib" }
-# AptosFramework = { local = "../aptos-framework"}
-
-[dependencies.MoveStdlib]
-git = "https://github.com/aptos-labs/aptos-core.git"
-rev = "mainnet"
-subdir = "aptos-move/framework/move-stdlib"
+[dev-addresses]
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
 rev = "mainnet"
 subdir = "aptos-move/framework/aptos-framework"
+
+[dependencies.AptosTokenObjects]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-token-objects"
+
+[dev-dependencies]
