@@ -560,6 +560,15 @@ module custom::aptos_token {
         custom_data.sale_time
     }
 
+    #[view]
+    public fun sale_active(addr: address, collection: String): bool acquires CustomHolder {
+        assert!(exists<CustomHolder>(addr), error::not_found(ENOT_INITIALIZED));
+        let holder = borrow_global<CustomHolder>(addr);
+        assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
+        let custom_data = table::borrow(&holder.custom_datas, collection);
+        (custom_data.sale_time <= timestamp::now_seconds())
+    }
+
     // Token mutators
 
     inline fun authorized_borrow<T: key>(token: &Object<T>, creator: &signer): &AptosToken {
@@ -746,6 +755,22 @@ module custom::aptos_token {
         let custom_datas = &mut borrow_global_mut<CustomHolder>(account_addr).custom_datas;
         let custom_data = table::borrow_mut(custom_datas, collection);
         custom_data.sale_time = sale_time;
+    }
+
+    public entry fun toggle_sale_active(
+        creator: &signer,
+        collection: String,
+    ) acquires CustomHolder {
+        let account_addr = signer::address_of(creator);
+        assert!(exists<CustomHolder>(account_addr), error::not_found(ENOT_INITIALIZED));
+        let custom_datas = &mut borrow_global_mut<CustomHolder>(account_addr).custom_datas;
+        let custom_data = table::borrow_mut(custom_datas, collection);
+        if ( custom_data.sale_time <= timestamp::now_seconds() ) {
+            custom_data.sale_time = 18_446_744_073_709_551_615;
+        }
+        else {
+            custom_data.sale_time = 0;
+        }
     }
 
     public entry fun add_property<T: key>(
