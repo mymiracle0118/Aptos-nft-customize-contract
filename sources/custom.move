@@ -19,7 +19,7 @@ module custom::aptos_token {
     use aptos_token_objects::property_map;
     use aptos_token_objects::royalty;
     use aptos_token_objects::token;
-    // use aptos_token_objects::token::Token;
+    use aptos_token_objects::token::Token;
     use aptos_std::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::account;
@@ -362,12 +362,10 @@ module custom::aptos_token {
 
             let new_token_uri = custom_data.token_uri;
             string::append(&mut new_token_uri, number);
-            mint_token_object(&resource_signer, collection, description, new_token_name, new_token_uri, vector[], vector[], vector[]);
-
-            // transfer to user
-            // let token_addr = token::create_token_address(&creator_address, &collection, &new_token_name);
-            // let token = object::address_to_object<Token>(token_addr);
-            // object::transfer(&resource_signer, token, signer::address_of(user));
+            
+            let token = mint_token_object(&resource_signer, collection, description, new_token_name, new_token_uri, vector[], vector[], vector[]);
+            
+            object::transfer(&resource_signer, token, signer::address_of(user));
 
             index = index + 1;
         }
