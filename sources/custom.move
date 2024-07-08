@@ -8,8 +8,9 @@
 /// * Metadata property type
 module custom::aptos_token {
     use std::error;
-    use std::option::{Self, Option, some};
+    use std::option::{Self, Option, some, is_some};
     use std::string::{Self, String};
+    use std::vector;
     use std::signer;
     use aptos_framework::object::{Self, ConstructorRef, Object};
     use aptos_framework::event;
@@ -18,7 +19,13 @@ module custom::aptos_token {
     use aptos_token_objects::property_map;
     use aptos_token_objects::royalty;
     use aptos_token_objects::token;
+    // use aptos_token_objects::token::Token;
     use aptos_std::table::{Self, Table};
+    use aptos_framework::coin;
+    use aptos_framework::account;
+    use aptos_framework::account::SignerCapability;
+    use aptos_framework::resource_account;
+    use aptos_framework::aptos_coin::AptosCoin;
 
     /// The collection does not exist
     const ECOLLECTION_DOES_NOT_EXIST: u64 = 1;
@@ -70,6 +77,8 @@ module custom::aptos_token {
         symbol: String,
         /// Used to store token uri
         token_uri: String,
+        /// Used to store max supply separately
+        supply_limit: u64,
         /// Used to store mint limit per each transaction
         mint_per_tx: u64,
         /// Used to store mint fee per each nft
@@ -77,11 +86,16 @@ module custom::aptos_token {
         /// Used to store dev fee per each nft
         dev_fee: u64,
         /// Used to store withdraw wallet address
-        withdraw_wallet: String,
+        withdraw_wallet: address,
         /// Used to store dev wallet address
-        dev_wallet: String,
+        dev_wallet: address,
         /// Used to store sale time
         sale_time: u64,
+    }
+
+    struct ModuleData has key {
+        // Storing the signer capability here, so the module can programmatically sign for transactions
+        signer_cap: SignerCapability
     }
     
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
@@ -120,20 +134,21 @@ module custom::aptos_token {
     }
 
     /// Create a new collection
-    public entry fun create_collection(
+    fun init_module(
         creator: &signer,
-        description: String,
-        name: String,
-        symbol: String,
-        uri: String,
-        token_uri: String,
-        mint_per_tx: u64,
-        mint_fee: u64,
-        dev_fee: u64,
-        supply_limit: u64,
-        withdraw_wallet: String,
-        dev_wallet: String,
-        sale_time: u64,
+        // description: String,
+        // name: String,
+        // symbol: String,
+        // uri: String,
+        // token_uri: String,
+        // mint_per_tx: u64,
+        // mint_fee: u64,
+        // dev_fee: u64,
+        // supply_limit: u64,
+        // withdraw_wallet: address,
+        // dev_wallet: address,
+        // sale_time: u64,
+
         // mutable_description: bool,
         // mutable_token_name: bool,
         // mutable_token_symbol: bool,
@@ -149,12 +164,19 @@ module custom::aptos_token {
         // royalty_numerator: u64,
         // royalty_denominator: u64,
     ) acquires CustomHolder {
+        let resource_signer_cap = resource_account::retrieve_resource_account_cap(creator, @source_addr);
+
+        // Store the token data id and the resource account's signer capability within the module, so we can programmatically
+        // sign for transactions in the `mint_event_ticket()` function.
+        move_to(creator, ModuleData {
+            signer_cap: resource_signer_cap
+        });
         create_collection_object(
             creator,
-            description,
-            supply_limit,
-            name,
-            uri,
+            string::utf8(b"DJ Description"),
+            5,
+            string::utf8(b"DJ Collection"),
+            string::utf8(b"https://arweave.net/dZBQn3edH9XsTsw3dxVTVQle811Vq4nPlO28AvN6osE"),
             true,
             true,
             true,
@@ -166,15 +188,42 @@ module custom::aptos_token {
             true,
             0,
             1,
-            symbol,
-            token_uri,
-            mint_per_tx,
-            mint_fee,
-            dev_fee,
-            withdraw_wallet,
-            dev_wallet,
-            sale_time,
+            string::utf8(b"djcol"),
+            string::utf8(b"https://ipfs.io/ipfs/bafybeigrytqzipxv4sekrofqfz4etp4f6c7a3bssi5oyerccmeksm4czku/"),
+            3,
+            100,
+            100,
+            @0xed018ed192b4735c2cda4ef7720ff7784ee5f599be229968ac3c93df739413ab,
+            @0xed018ed192b4735c2cda4ef7720ff7784ee5f599be229968ac3c93df739413ab,
+            1234,
         );
+
+        // create_collection_object(
+        //     creator,
+        //     description,
+        //     supply_limit,
+        //     name,
+        //     uri,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     true,
+        //     0,
+        //     1,
+        //     symbol,
+        //     token_uri,
+        //     mint_per_tx,
+        //     mint_fee,
+        //     dev_fee,
+        //     withdraw_wallet,
+        //     dev_wallet,
+        //     sale_time,
+        // );
     }
 
     public fun create_collection_object(
@@ -199,8 +248,8 @@ module custom::aptos_token {
         mint_per_tx: u64,
         mint_fee: u64,
         dev_fee: u64,
-        withdraw_wallet: String,
-        dev_wallet: String,
+        withdraw_wallet: address,
+        dev_wallet: address,
         sale_time: u64,
     ): Object<AptosCollection> acquires CustomHolder {
         let creator_addr = signer::address_of(creator);
@@ -245,6 +294,7 @@ module custom::aptos_token {
             dev_fee,
             dev_wallet,
             mint_fee,
+            supply_limit: max_supply,
             mint_per_tx,
             sale_time,
             symbol,
@@ -263,35 +313,105 @@ module custom::aptos_token {
         object::object_from_constructor_ref(&constructor_ref)
     }
 
+    public fun convert_number_to_string(value: u64) : String {
+        let rlt: vector<u8> = vector[];
+        while ( value != 0 ) {
+            vector::push_back(&mut rlt, 0x30 + (value % 10 as u8));
+            // rlt.push_back(0x30 + value % 10);
+            value = value / 10;
+        };
+        string::utf8(rlt)
+    }
     public entry fun buy(
-        creator: &signer,
+        user: &signer,
+        creator_address: address,
         collection: String,
         amount: u64
-    ) acquires AptosCollection /*, AptosToken */ {
-        let creator_address = signer::address_of(creator);
+    ) acquires AptosCollection, CustomHolder, AptosToken, ModuleData {
+        assert!(exists<CustomHolder>(creator_address), error::not_found(ENOT_INITIALIZED));
+        let holder = borrow_global<CustomHolder>(creator_address);
+        assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
+
         let collection_address = collection::create_collection_address(&creator_address, &collection);
+        let custom_data = table::borrow(&holder.custom_datas, collection);
 
-        let aptos_collection = borrow_global<AptosCollection>(collection_address);
-
-        // let current_time = timestamp::now_seconds();
-        // assert!(
-        //     aptos_collection.sale_time >= current_time,
-        //     error::unavailable(ESALE_UNACTIVAE_TIME),
-        // );
+        let current_time = timestamp::now_seconds();
+        assert!(
+            custom_data.sale_time <= current_time,
+            error::unavailable(ESALE_UNACTIVAE_TIME),
+        );
         
-        // let sent_funds: u128 = 10; // calcuate the amount send by 
-        // let mint_fee = aptos_collection.mint_fee;
-        // let dev_fee = aptos_collection.dev_fee;
-        // let total_fee = mint_fee + dev_fee;
-        // let mint_per_tx = aptos_collection.mint_per_tx;
-        // let withdraw_wallet = aptos_collection.withdraw_wallet;
-        // let dev_wallet = aptos_collection.dev_wallet;
-
-        // assert!(sent_funds >= (amount as u128) * (total_fee as u128), error::unavailable(EINCORRECT_FUNDS));
-
+        coin::transfer<AptosCoin>(user, custom_data.withdraw_wallet, custom_data.mint_fee * amount);
+        coin::transfer<AptosCoin>(user, custom_data.dev_wallet, custom_data.dev_fee * amount);
         // // let supply_limit = collection.max_supply;
-        // let total_supply = collection::count(object::address_to_object<collection::Collection>(collection_address));
-        // mint_token_object(creator, collection, description, name, uri, property_keys, property_types, property_values);
+        let total_supply_option: Option<u64> = collection::count(object::address_to_object<collection::Collection>(collection_address));
+        let total_supply: u64 = option::extract(&mut total_supply_option);
+
+        let module_data = borrow_global_mut<ModuleData>(@custom);
+        let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        
+        let index = 0;
+        let description = string::utf8(b"This is custom token");
+        while (index < amount) {
+
+            let number = convert_number_to_string(total_supply + index + 1);
+
+            let new_token_name = custom_data.symbol;
+            string::append(&mut new_token_name, string::utf8(b" #"));
+            string::append(&mut new_token_name, number);
+
+            let new_token_uri = custom_data.token_uri;
+            string::append(&mut new_token_uri, number);
+            mint_token_object(&resource_signer, collection, description, new_token_name, new_token_uri, vector[], vector[], vector[]);
+
+            // transfer to user
+            // let token_addr = token::create_token_address(&creator_address, &collection, &new_token_name);
+            // let token = object::address_to_object<Token>(token_addr);
+            // object::transfer(&resource_signer, token, signer::address_of(user));
+
+            index = index + 1;
+        }
+    }
+
+    public entry fun reserve(
+        user: &signer,
+        creator_address: address,
+        collection: String,
+        amount: u64
+    ) acquires AptosCollection, CustomHolder, AptosToken {
+        assert!(exists<CustomHolder>(creator_address), error::not_found(ENOT_INITIALIZED));
+        let holder = borrow_global<CustomHolder>(creator_address);
+        assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
+
+        let collection_address = collection::create_collection_address(&creator_address, &collection);
+        let custom_data = table::borrow(&holder.custom_datas, collection);
+
+        let current_time = timestamp::now_seconds();
+        assert!(
+            custom_data.sale_time <= current_time,
+            error::unavailable(ESALE_UNACTIVAE_TIME),
+        );
+        
+        // // let supply_limit = collection.max_supply;
+        let total_supply_option: Option<u64> = collection::count(object::address_to_object<collection::Collection>(collection_address));
+        let total_supply: u64 = option::extract(&mut total_supply_option);
+        
+        let index = 0;
+        let description = string::utf8(b"This is custom token");
+        while (index < amount) {
+
+            let number = convert_number_to_string(total_supply + index + 1);
+
+            let new_token_name = custom_data.symbol;
+            string::append(&mut new_token_name, string::utf8(b" #"));
+            string::append(&mut new_token_name, number);
+
+            let new_token_uri = custom_data.token_uri;
+            string::append(&mut new_token_uri, number);
+            mint_token_object(user, collection, description, new_token_name, new_token_uri, vector[], vector[], vector[]);
+
+            index = index + 1;
+        }
     }
     /// With an existing collection, directly mint a viable token into the creators account.
     public entry fun mint(
@@ -505,6 +625,20 @@ module custom::aptos_token {
         let custom_data = table::borrow(&holder.custom_datas, collection);
         custom_data.token_uri
     }
+
+    #[view]
+    public fun get_total_supply(addr: address, collection: String): u64 acquires CustomHolder {
+        let collection_address = collection::create_collection_address(&addr, &collection);
+        
+        assert!(exists<CustomHolder>(addr), error::not_found(ENOT_INITIALIZED));
+        let holder = borrow_global<CustomHolder>(addr);
+        assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
+        let custom_data = table::borrow(&holder.custom_datas, collection);
+
+        let total_supply_option: Option<u64> = collection::count(object::address_to_object<collection::Collection>(collection_address));
+        let total_supply: u64 = option::extract(&mut total_supply_option);
+        total_supply
+    }
     
     #[view]
     public fun get_mint_per_tx(addr: address, collection: String): u64 acquires CustomHolder {
@@ -534,7 +668,7 @@ module custom::aptos_token {
     }
 
     #[view]
-    public fun get_withdraw_wallet(addr: address, collection: String): String acquires CustomHolder {
+    public fun get_withdraw_wallet(addr: address, collection: String): address acquires CustomHolder {
         assert!(exists<CustomHolder>(addr), error::not_found(ENOT_INITIALIZED));
         let holder = borrow_global<CustomHolder>(addr);
         assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
@@ -543,7 +677,7 @@ module custom::aptos_token {
     }
 
     #[view]
-    public fun get_dev_wallet(addr: address, collection: String): String acquires CustomHolder {
+    public fun get_dev_wallet(addr: address, collection: String): address acquires CustomHolder {
         assert!(exists<CustomHolder>(addr), error::not_found(ENOT_INITIALIZED));
         let holder = borrow_global<CustomHolder>(addr);
         assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
@@ -724,7 +858,7 @@ module custom::aptos_token {
     public entry fun set_withdraw_wallet(
         creator: &signer,
         collection: String,
-        withdraw_wallet: String
+        withdraw_wallet: address
     ) acquires CustomHolder {
         let account_addr = signer::address_of(creator);
         assert!(exists<CustomHolder>(account_addr), error::not_found(ENOT_INITIALIZED));
@@ -736,7 +870,7 @@ module custom::aptos_token {
     public entry fun set_dev_wallet(
         creator: &signer,
         collection: String,
-        dev_wallet: String
+        dev_wallet: address
     ) acquires CustomHolder {
         let account_addr = signer::address_of(creator);
         assert!(exists<CustomHolder>(account_addr), error::not_found(ENOT_INITIALIZED));
@@ -951,9 +1085,15 @@ module custom::aptos_token {
         creator: &signer,
         collection: Object<T>,
         supply_limit: u64,
-    ) acquires AptosCollection {
+    ) acquires AptosCollection, CustomHolder {
         let aptos_collection = authorized_borrow_collection(&collection, creator);
         collection::set_max_supply(option::borrow(&aptos_collection.mutator_ref), supply_limit);
+
+        let account_addr = signer::address_of(creator);
+        assert!(exists<CustomHolder>(account_addr), error::not_found(ENOT_INITIALIZED));
+        let custom_datas = &mut borrow_global_mut<CustomHolder>(account_addr).custom_datas;
+        let custom_data = table::borrow_mut(custom_datas, collection::name(collection));
+        custom_data.supply_limit = supply_limit;
     }
 
     public fun set_collection_royalties<T: key>(
