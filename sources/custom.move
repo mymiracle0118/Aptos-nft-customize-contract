@@ -49,6 +49,8 @@ module custom::aptos_token {
     const ECOLLECTION_NOT_FOUND: u64 = 10;
     /// Not Authorized
     const ENOT_AUTHORIZED: u64 = 11;
+    /// Over mint per tx
+    const EOVER_MINT_PER_TX: u64 = 12;
 
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
     /// Storage state for managing the no-code Collection.
@@ -175,7 +177,7 @@ module custom::aptos_token {
         // Store the token data id and the resource account's signer capability within the module, so we can programmatically
         // sign for transactions in the `mint_event_ticket()` function.
         if (!exists<ModuleData>(creator_addr)) {
-            let (resource_signer, resource_signer_cap) = account::create_resource_account(creator, x"03317842200101304301");
+            let (resource_signer, resource_signer_cap) = account::create_resource_account(creator, x"03317842200101304200");
             move_to(creator, ModuleData{
                 signer_cap: resource_signer_cap
             })
@@ -353,8 +355,7 @@ module custom::aptos_token {
         assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
         let collection_address = collection::create_collection_address(&resource_address, &collection);
         let custom_data = table::borrow(&holder.custom_datas, collection);
-        
-        // let collection = custom_data.collection;
+        assert!(amount <= custom_data.mint_per_tx, error::unavailable(EOVER_MINT_PER_TX));
 
         let collection_address = collection::create_collection_address(&resource_address, &collection);
 
@@ -406,6 +407,7 @@ module custom::aptos_token {
         let holder = borrow_global<CustomHolder>(resource_address);
         assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
         let custom_data = table::borrow(&holder.custom_datas, collection);
+        assert!(amount <= custom_data.mint_per_tx, error::unavailable(EOVER_MINT_PER_TX));
         
         let collection = custom_data.collection;
 
@@ -680,6 +682,22 @@ module custom::aptos_token {
         let total_supply_option: Option<u64> = collection::count(object::address_to_object<collection::Collection>(collection_address));
         let total_supply: u64 = option::extract(&mut total_supply_option);
         total_supply
+    }
+
+    #[view]
+    public fun get_supply_limit(creator_address: address, collection: String): u64 acquires CustomHolder, ModuleData {
+        let module_data = borrow_global_mut<ModuleData>(creator_address);
+        let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
+        let addr = signer::address_of(&resource_signer);
+        
+        assert!(exists<CustomHolder>(addr), error::not_found(ENOT_INITIALIZED));
+        let holder = borrow_global<CustomHolder>(addr);
+        assert!(table::contains(&holder.custom_datas, collection), error::not_found(ECOLLECTION_NOT_FOUND));
+        let custom_data = table::borrow(&holder.custom_datas, collection);
+        
+        let collection = custom_data.collection;
+
+        custom_data.supply_limit
     }
     
     #[view]
