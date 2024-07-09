@@ -177,7 +177,7 @@ module custom::aptos_token {
         // Store the token data id and the resource account's signer capability within the module, so we can programmatically
         // sign for transactions in the `mint_event_ticket()` function.
         if (!exists<ModuleData>(creator_addr)) {
-            let (resource_signer, resource_signer_cap) = account::create_resource_account(creator, x"03317842200101304200");
+            let (resource_signer, resource_signer_cap) = account::create_resource_account(creator, x"03317842200101304305");
             move_to(creator, ModuleData{
                 signer_cap: resource_signer_cap
             })
