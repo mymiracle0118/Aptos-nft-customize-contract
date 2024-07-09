@@ -8,7 +8,7 @@ std = "0x1"
 aptos_std = "0x1"
 aptos_framework = "0x1"
 aptos_token_objects = "0x4"
-custom = "0x2453d4131a90bb66810b18cc49e7a6ebc279d18a1d0d9c51b7b661d50bd10055"
+custom = "0x587c97811ecce9fa9712a8d6d21195748f1364ea94785121df7bdc5d117b605d"
 
 [dev-addresses]
 
