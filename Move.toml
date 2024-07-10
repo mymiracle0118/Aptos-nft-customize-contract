@@ -1,5 +1,5 @@
 [package]
-name = "custom"
+name = "dropspace"
 version = "1.0.0"
 authors = []
 
@@ -8,7 +8,7 @@ std = "0x1"
 aptos_std = "0x1"
 aptos_framework = "0x1"
 aptos_token_objects = "0x4"
-custom = "0x587c97811ecce9fa9712a8d6d21195748f1364ea94785121df7bdc5d117b605d"
+dropspace = "0x95509734a29d497b889e69b9993a44d61c6535f608b5bf021cf56ce82e29d520"
 
 [dev-addresses]
 
